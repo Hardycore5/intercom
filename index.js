@@ -353,7 +353,7 @@ const msbConfig = createMsbConfig(MSB_ENV.MAINNET, {
   storeName: msbStoreName,
   storesDirectory: msbStoresDirectory,
   enableInteractiveMode: false,
-  dhtBootstrap: msbDhtBootstrap || undefined,
+  dhtBootstrap: msbDhtBootstrap || ["116.202.214.149:10001","157.180.12.214:10001","node1.hyperdht.org:49737","node2.hyperdht.org:49737","node3.hyperdht.org:49737"],
 });
 
 const msbBootstrapHex = b4a.toString(msbConfig.bootstrap, 'hex');
@@ -370,7 +370,7 @@ const peerConfig = createPeerConfig(PEER_ENV.MAINNET, {
   enableBackgroundTasks: true,
   enableUpdater: true,
   replicate: true,
-  dhtBootstrap: peerDhtBootstrap || undefined,
+  dhtBootstrap: peerDhtBootstrap || ["116.202.214.149:10001","157.180.12.214:10001","node1.hyperdht.org:49737","node2.hyperdht.org:49737","node3.hyperdht.org:49737"],
 });
 
 const ensureKeypairFile = async (keyPairPath) => {
@@ -481,6 +481,19 @@ if (scBridgeEnabled) {
   });
 }
 
+// 🔮 OracleBot
+const ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY || ""
+async function askClaude(question) {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-opus-4-6", max_tokens: 300, system: "You are OracleBot on Trac Network. Answer questions about crypto, Bitcoin, Ordinals and Trac. Be concise, 2-3 sentences.", messages: [{ role: "user", content: question }] })
+    })
+    const data = await response.json()
+    return data?.content?.[0]?.text?.trim() || "No response."
+  } catch (err) { return "Oracle error: " + err.message }
+}
 const sidechannel = new Sidechannel(peer, {
   channels: [sidechannelEntry, ...sidechannelExtras],
   debug: sidechannelDebug,
@@ -502,11 +515,28 @@ const sidechannel = new Sidechannel(peer, {
   ownerWriteChannels: sidechannelOwnerWriteChannels || undefined,
   ownerKeys: sidechannelOwnerMap.size > 0 ? sidechannelOwnerMap : undefined,
   welcomeByChannel: sidechannelWelcomeMap.size > 0 ? sidechannelWelcomeMap : undefined,
-  onMessage: scBridgeEnabled
+  onMessage: async (channel, payload) => { const msg = payload?.message; const text = typeof msg === "string" ? msg : msg?.text || null; if (text) { const t = text.trim(); const q = t.startsWith("/ask ") ? t.slice(5).trim() : t.startsWith("? ") ? t.slice(2).trim() : null; if (q) { console.log("📨 OracleBot ["+channel+"]: "+q); askClaude(q).then(a => { console.log("✅ OracleBot replied"); sidechannel.broadcast(channel, { text: "🔮 OracleBot: "+a }); }); } } },
+      onMessageX: scBridgeEnabled
     ? (channel, payload, connection) => scBridge.handleSidechannelMessage(channel, payload, connection)
     : sidechannelQuiet
       ? () => {}
-      : null,
+      : async (channel, payload) => {
+          try {
+            const msg = payload?.message
+            if (!msg) return
+            const text = typeof msg === "string" ? msg : typeof msg?.text === "string" ? msg.text : null
+            if (!text) return
+            const trimmed = text.trim()
+            const isQuestion = trimmed.startsWith("/ask ") || trimmed.startsWith("? ")
+            if (!isQuestion) return
+            const question = trimmed.startsWith("/ask ") ? trimmed.slice(5).trim() : trimmed.slice(2).trim()
+            if (!question.length) return
+            console.log(`\n📨 OracleBot [${channel}]: "${question}"` )
+            const answer = await askClaude(question)
+            console.log("✅ OracleBot replied")
+            sidechannel.broadcast(channel, { text: `🔮 OracleBot: ${answer}` })
+          } catch (err) { console.error("OracleBot error:", err.message) }
+        },
 });
 peer.sidechannel = sidechannel;
 
@@ -531,3 +561,5 @@ sidechannel
 
 const terminal = new Terminal(peer);
 await terminal.start();
+
+// ═══════════════════════════════════════════════
