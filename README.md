@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/c35045c4-fb82-4a84-a0e8-1151fd8d5503
+
 App Generated Trac Address (CLI): trac1l6t3sextu3jaxglu59566h3m4xcaqtmwwle3c3xrkfq642h84urq9g4ec9
 
 Reward Receiving Wallet (Tap Wallet): trac1af22xy8gkxxma4w8x4ma5v54cz7ve4pyfceecdvf259xjsta86hsxqkvma
